@@ -1,0 +1,14 @@
+# Node
+nodejs-task-service/node_modules/
+angular-frontend/node_modules/
+
+# Spring Boot
+userService/target/
+*.jar
+
+# Docker
+*.env
+docker-compose.override.yml
+
+# OS
+.DS_Store
