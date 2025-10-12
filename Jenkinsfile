@@ -8,32 +8,34 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/NassimeElkamari/microservices.git'
+                git branch: 'main', url: 'https://github.com/<your-username>/<your-repo>.git'
             }
         }
 
         stage('Build Images') {
             steps {
-                sh 'docker-compose build'
+                bat 'docker-compose build'
             }
         }
 
         stage('Run Containers') {
             steps {
-                sh 'docker-compose up -d'
+                bat 'docker-compose up -d'
             }
         }
 
         stage('Test') {
             steps {
                 echo 'Running tests...'
-                // You can later add: sh 'npm test' or mvn test
+                // Later you can add commands like:
+                // bat 'npm test'
+                // bat 'mvn test'
             }
         }
 
         stage('Cleanup') {
             steps {
-                sh 'docker-compose down'
+                bat 'docker-compose down'
             }
         }
     }
