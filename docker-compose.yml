@@ -1,0 +1,66 @@
+version: '3.9'
+
+services:
+  mysql-db:
+    image: mysql:8
+    container_name: mysql-db
+    environment:
+      MYSQL_ROOT_PASSWORD: 672002
+      MYSQL_DATABASE: todo_db
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql-init:/docker-entrypoint-initdb.d
+    networks:
+      - micro-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      retries: 10
+      timeout: 5s
+
+  nodejs-task-service:
+    build:
+      context: ./nodejs-task-service
+      dockerfile: Dockerfile
+    container_name: nodejs-task-service
+    ports:
+      - "3000:3000"
+    depends_on:
+      - mysql-db
+    networks:
+      - micro-net
+
+  spring-user-service:
+    build:
+      context: ./userService
+      dockerfile: Dockerfile
+    container_name: spring-user-service-container
+    ports:
+      - "8081:8081"
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+    networks:
+      - micro-net
+
+  angular-frontend:
+    build:
+      context: ./angular-frontend
+      dockerfile: Dockerfile
+    container_name: angular-frontend-container
+    ports:
+      - "4200:80"
+    depends_on:
+      - nodejs-task-service
+      - spring-user-service
+    networks:
+      - micro-net
+
+volumes:
+  mysql-data:
+
+networks:
+  micro-net:
+    driver: bridge
