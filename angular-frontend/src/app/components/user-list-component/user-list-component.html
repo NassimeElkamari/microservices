@@ -1,0 +1,53 @@
+<div class="user-header">
+  <div class="title-group">
+    <h2>Users</h2>
+    <p class="subtitle">Manage your team directory and contacts</p>
+  </div>
+  <div class="header-actions">
+    <span class="count-badge" *ngIf="!loading">{{ users.length || 0 }} users</span>
+    <button mat-icon-button color="primary" class="icon-btn" (click)="openAddUser()" aria-label="Add user">
+      <span class="material-icons" aria-hidden="true">add</span>
+    </button>
+  </div>
+</div>
+
+<div *ngIf="loading" class="loading">
+  <div class="spinner" aria-hidden="true"></div>
+  <span>Loading users...</span>
+  </div>
+
+<div *ngIf="!loading && users.length" class="user-table-container">
+  <table class="user-table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let user of users">
+        <td>{{ user.id }}</td>
+        <td>{{ user.name }}</td>
+        <td>{{ user.email }}</td>
+        <td class="actions">
+          <button mat-icon-button color="accent" class="icon-btn" (click)="openEditUser(user)" aria-label="Edit user">
+            <span class="material-icons" aria-hidden="true">edit</span>
+          </button>
+          <button mat-icon-button color="warn" class="icon-btn" (click)="deleteUser(user.id)" aria-label="Delete user">
+            <span class="material-icons" aria-hidden="true">delete</span>
+          </button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div *ngIf="!loading && !users.length" class="empty-state">
+  <span class="material-icons empty-icon" aria-hidden="true">inbox</span>
+  <p>No users found</p>
+  <button mat-icon-button color="primary" class="icon-btn" (click)="openAddUser()" aria-label="Add user">
+    <span class="material-icons" aria-hidden="true">add</span>
+  </button>
+</div>

@@ -1,0 +1,62 @@
+<div class="task-header">
+  <div class="title-group">
+    <h2>Task Management</h2>
+    <p class="subtitle">Track, assign, and complete tasks with clarity</p>
+  </div>
+  <div class="header-actions">
+    <span class="count-badge" *ngIf="!loading">{{ tasks.length || 0 }} tasks</span>
+    <button mat-icon-button color="primary" class="icon-btn" (click)="openAddTask()" aria-label="Add task">
+      <span class="material-icons" aria-hidden="true">add</span>
+    </button>
+  </div>
+</div>
+  
+  <div *ngIf="loading" class="loading">
+    <div class="spinner" aria-hidden="true"></div>
+    <span>Loading tasks...</span>
+  </div>
+  
+  <div *ngIf="!loading && tasks.length" class="task-table-container">
+    <table class="task-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Title</th>
+          <th>Description</th>
+          <th>User</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let task of tasks">
+          <td>{{ task.id }}</td>
+          <td>{{ task.title }}</td>
+          <td>{{ task.description }}</td>
+          <td>
+            <span class="user-chip" [attr.title]="getUserName(task.user_id)">{{ getUserName(task.user_id) }}</span>
+          </td>
+          <td>
+            <span class="status-badge" [ngClass]="task.status">{{ task.status }}</span>
+          </td>
+          <td class="actions">
+            <button mat-icon-button color="accent" class="icon-btn" (click)="openEditTask(task)" aria-label="Edit task">
+              <span class="material-icons" aria-hidden="true">edit</span>
+            </button>
+            <button mat-icon-button color="warn" class="icon-btn" (click)="deleteTask(task.id)" aria-label="Delete task">
+              <span class="material-icons" aria-hidden="true">delete</span>
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  
+  <div *ngIf="!loading && !tasks.length" class="empty-state">
+    <span class="material-icons empty-icon" aria-hidden="true">inbox</span>
+    <p>No tasks found</p>
+    <button mat-icon-button color="primary" class="icon-btn" (click)="openAddTask()" aria-label="Add task">
+      <span class="material-icons" aria-hidden="true">add</span>
+    </button>
+  </div>
+  
