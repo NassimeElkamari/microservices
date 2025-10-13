@@ -6,12 +6,12 @@ pipeline {
         K8S_DIR    = 'k8s'
         NAMESPACE  = 'microservices'
 
-        // Local image names produced by docker-compose build
+        // Local images produced by compose build
         LOCAL_ANGULAR = 'microservices-angular-frontend:latest'
         LOCAL_NODE    = 'microservices-nodejs-task-service:latest'
         LOCAL_SPRING  = 'microservices-spring-user-service:latest'
 
-        // Docker Hub repo (public) – adjust username if needed
+        // Docker Hub repo (public)
         DOCKER_HUB_USER = 'nassimeelkamari'
         HUB_ANGULAR = "docker.io/${DOCKER_HUB_USER}/microservices-angular-frontend:latest"
         HUB_NODE    = "docker.io/${DOCKER_HUB_USER}/microservices-nodejs-task-service:latest"
@@ -20,6 +20,7 @@ pipeline {
 
     options {
         timeout(time: 40, unit: 'MINUTES')
+        timestamps()
     }
 
     stages {
@@ -56,16 +57,19 @@ pipeline {
         stage('Docker Hub Login & Push (Angular + Node only)') {
             steps {
                 echo 'Logging in & pushing images to Docker Hub (skip Spring)...'
-                script {
-                    withDockerRegistry(credentialsId: 'dockerHub_cred', url: 'https://registry-1.docker.io/') {
-                        retry(2) {
-                            bat "docker push %HUB_ANGULAR%"
-                        }
-                        retry(2) {
-                            bat "docker push %HUB_NODE%"
-                        }
-                        echo 'Skipping Spring push: using existing image on Docker Hub.'
+                withCredentials([usernamePassword(credentialsId: 'dockerHub_cred', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    // Use PowerShell to avoid Windows CMD escaping issues on secrets
+                    powershell '''
+                        $ErrorActionPreference = "Stop"
+                        $env:DOCKER_PASS | docker login --username $env:DOCKER_USER --password-stdin
+                    '''
+                    retry(2) {
+                        bat "docker push %HUB_ANGULAR%"
                     }
+                    retry(2) {
+                        bat "docker push %HUB_NODE%"
+                    }
+                    echo 'Skipping Spring push: using existing image on Docker Hub.'
                 }
             }
         }
@@ -73,17 +77,16 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 echo 'Applying Kubernetes manifests...'
-                // Make sure your YAMLs reference HUB_* images (Docker Hub), and use imagePullPolicy: IfNotPresent (or Always)
                 bat """
                 kubectl apply -f %K8S_DIR%/namespace.yaml
                 kubectl apply -f %K8S_DIR% -n %NAMESPACE%
                 """
                 echo 'Waiting for rollouts...'
                 bat """
-                kubectl rollout status deployment/mysql-db -n %NAMESPACE% --timeout=180s || true
+                kubectl rollout status deployment/mysql-db            -n %NAMESPACE% --timeout=180s || true
                 kubectl rollout status deployment/nodejs-task-service -n %NAMESPACE% --timeout=180s || true
                 kubectl rollout status deployment/spring-user-service -n %NAMESPACE% --timeout=180s || true
-                kubectl rollout status deployment/angular-frontend -n %NAMESPACE% --timeout=180s || true
+                kubectl rollout status deployment/angular-frontend    -n %NAMESPACE% --timeout=180s || true
                 """
             }
         }
@@ -92,9 +95,9 @@ pipeline {
             steps {
                 echo 'Scaling deployments...'
                 bat """
-                kubectl scale deployment nodejs-task-service   -n %NAMESPACE% --replicas=2
-                kubectl scale deployment spring-user-service   -n %NAMESPACE% --replicas=2
-                kubectl scale deployment angular-frontend      -n %NAMESPACE% --replicas=1
+                kubectl scale deployment nodejs-task-service -n %NAMESPACE% --replicas=2
+                kubectl scale deployment spring-user-service -n %NAMESPACE% --replicas=2
+                kubectl scale deployment angular-frontend    -n %NAMESPACE% --replicas=1
                 """
             }
         }
