@@ -54,25 +54,35 @@ pipeline {
             }
         }
 
-        stage('Docker Hub Login & Push (Angular + Node only)') {
-            steps {
-                echo 'Logging in & pushing images to Docker Hub (skip Spring)...'
+       stage('Docker Hub Login & Push (Angular + Node only, fallback to Minikube)') {
+        steps {
+            script {
+            def pushed = false
+            try {
                 withCredentials([usernamePassword(credentialsId: 'dockerHub_cred', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    // Use PowerShell to avoid Windows CMD escaping issues on secrets
-                    powershell '''
-                        $ErrorActionPreference = "Stop"
-                        $env:DOCKER_PASS | docker login --username $env:DOCKER_USER --password-stdin
-                    '''
-                    retry(2) {
-                        bat "docker push %HUB_ANGULAR%"
-                    }
-                    retry(2) {
-                        bat "docker push %HUB_NODE%"
-                    }
-                    echo 'Skipping Spring push: using existing image on Docker Hub.'
+                powershell '''
+                    $ErrorActionPreference = "Stop"
+                    docker logout | Out-Null
+                    $env:DOCKER_PASS | docker login --username $env:DOCKER_USER --password-stdin
+                '''
+                retry(2) { bat "docker push %HUB_ANGULAR%" }
+                retry(2) { bat "docker push %HUB_NODE%" }
+                echo 'Skipping Spring push (using existing image on Hub).'
+                pushed = true
                 }
+            } catch (e) {
+                echo "⚠️ Docker Hub push unavailable (${e}). Falling back to Minikube images."
             }
+            if (!pushed) {
+                bat """
+                minikube image load %LOCAL_ANGULAR%
+                minikube image load %LOCAL_NODE%
+                """
+            }
+            }
+          }
         }
+
 
         stage('Deploy to Kubernetes') {
             steps {
