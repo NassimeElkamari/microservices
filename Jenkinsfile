@@ -31,15 +31,6 @@ pipeline {
             }
         }
 
-        stage('Prepare Minikube') {
-            steps {
-                echo 'Ensuring Minikube is running...'
-                bat '''
-                minikube status || minikube start --driver=docker
-                kubectl config current-context
-                '''
-            }
-        }
 
         stage('Build Images') {
             steps {
