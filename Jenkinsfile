@@ -2,114 +2,101 @@ pipeline {
   agent any
 
   environment {
-    DOCKER_COMPOSE_FILE = 'docker-compose.yml'
-    K8S_DIR    = 'k8s'
-    NAMESPACE  = 'microservices'
+    DOCKER_CREDENTIALS = 'dockerHub_cred'          // Jenkins credentials ID
+    DOCKER_USER        = 'nassimeelkamari'         // Docker Hub username
 
-    // Local images built by docker-compose (must match your k8s manifests)
-    LOCAL_ANGULAR = 'microservices-angular-frontend:latest'
-    LOCAL_NODE    = 'microservices-nodejs-task-service:latest'
-    LOCAL_SPRING  = 'microservices-spring-user-service:latest'
-  }
+    // Image names
+    IMG_ANGULAR_LOCAL  = 'microservices-angular-frontend:latest'
+    IMG_NODE_LOCAL     = 'microservices-nodejs-task-service:latest'
+    IMG_SPRING_LOCAL   = 'microservices-spring-user-service:latest'   // not pushing
 
-  options {
-    timeout(time: 45, unit: 'MINUTES')
-    timestamps()
+    IMG_ANGULAR_HUB    = "docker.io/${DOCKER_USER}/microservices-angular-frontend:latest"
+    IMG_NODE_HUB       = "docker.io/${DOCKER_USER}/microservices-nodejs-task-service:latest"
+    IMG_SPRING_HUB     = "docker.io/${DOCKER_USER}/microservices-spring-user-service:latest" // already on Hub
+
+    // K8s
+    NAMESPACE          = 'microservices'
+    K8S_DIR            = 'k8s'
+    DEPLOY_ANGULAR     = 'angular-frontend'
+    DEPLOY_NODE        = 'nodejs-task-service'
+    DEPLOY_SPRING      = 'spring-user-service'
   }
 
   stages {
+
+    stage('Check Docker Access') {
+      steps {
+        bat 'whoami'
+        bat 'docker ps'
+      }
+    }
+
     stage('Checkout') {
       steps {
-        echo '📥 Cloning repository...'
         git branch: 'main', url: 'https://github.com/NassimeElkamari/microservices.git'
       }
     }
 
-    stage('Prepare Minikube') {
+    stage('Build images') {
       steps {
-        echo '🚜 Ensuring Minikube is running...'
-        bat '''
-          minikube status || minikube start --driver=docker
-          kubectl config current-context
-        '''
-      }
-    }
-
-    stage('Build Images (local)') {
-      steps {
-        echo '📦 Building Docker images with docker-compose...'
-        // no --no-cache, so Maven/npm layers are reused
-        bat 'docker-compose -f %DOCKER_COMPOSE_FILE% build'
-      }
-    }
-
-    stage('Load images into Minikube') {
-      steps {
-        echo '🚚 Loading images into Minikube (no Docker Hub push)...'
+        echo '🛠️ Building local images (compose)'
+        bat 'docker-compose build'  // no --no-cache so it reuses layers
+        echo '🏷️ Tagging for Docker Hub'
         bat """
-          minikube image load %LOCAL_ANGULAR%
-          minikube image load %LOCAL_NODE%
-          minikube image load %LOCAL_SPRING%
+          docker tag %IMG_ANGULAR_LOCAL% %IMG_ANGULAR_HUB%
+          docker tag %IMG_NODE_LOCAL%    %IMG_NODE_HUB%
+          docker tag %IMG_SPRING_LOCAL%  %IMG_SPRING_HUB%
         """
-        echo 'ℹ️ Ensure your k8s Deployments use these names and imagePullPolicy: IfNotPresent.'
       }
     }
 
+ 
     stage('Deploy to Kubernetes') {
       steps {
-        echo '⚙️ Applying Kubernetes manifests...'
+        echo '⚙️ Apply manifests'
         bat """
           kubectl apply -f %K8S_DIR%/namespace.yaml
           kubectl apply -f %K8S_DIR% -n %NAMESPACE%
         """
-      }
-    }
 
-    stage('Wait for Rollouts') {
-      steps {
-        echo '⏳ Waiting for rollouts (give pods time to start)...'
-        powershell '''
-          $ErrorActionPreference = "Continue"
-          try { kubectl rollout status deployment/mysql-db            -n microservices --timeout=300s } catch {}
-          try { kubectl rollout status deployment/nodejs-task-service -n microservices --timeout=300s } catch {}
-          try { kubectl rollout status deployment/spring-user-service -n microservices --timeout=300s } catch {}
-          try { kubectl rollout status deployment/angular-frontend    -n microservices --timeout=300s } catch {}
-        '''
-      }
-    }
-
-    stage('Scale') {
-      steps {
-        echo '📈 Scaling deployments...'
+        echo '🔁 Point deployments at the Hub images'
         bat """
-          kubectl scale deployment nodejs-task-service -n %NAMESPACE% --replicas=2
-          kubectl scale deployment spring-user-service -n %NAMESPACE% --replicas=2
-          kubectl scale deployment angular-frontend    -n %NAMESPACE% --replicas=1
+          kubectl -n %NAMESPACE% set image deployment/%DEPLOY_ANGULAR% %DEPLOY_ANGULAR%=%IMG_ANGULAR_HUB%
+          kubectl -n %NAMESPACE% set image deployment/%DEPLOY_NODE%    %DEPLOY_NODE%=%IMG_NODE_HUB%
+          kubectl -n %NAMESPACE% set image deployment/%DEPLOY_SPRING%  %DEPLOY_SPRING%=%IMG_SPRING_HUB%
+        """
+
+        echo '⏳ Wait for rollout'
+        bat """
+          kubectl -n %NAMESPACE% rollout status deployment/%DEPLOY_ANGULAR% --timeout=300s
+          kubectl -n %NAMESPACE% rollout status deployment/%DEPLOY_NODE%    --timeout=300s
+          kubectl -n %NAMESPACE% rollout status deployment/%DEPLOY_SPRING%  --timeout=300s
         """
       }
     }
 
     stage('Smoke Check') {
       steps {
-        echo '🔍 Verifying resources & printing service URL...'
         bat """
-          kubectl get deploy,po,svc -n %NAMESPACE%
+          kubectl -n %NAMESPACE% get deploy,po,svc -o wide
           echo.
-          echo Angular service URL:
-          minikube -p minikube -n %NAMESPACE% service angular-frontend --url
+          echo Angular URL:
+          minikube -p minikube -n %NAMESPACE% service %DEPLOY_ANGULAR% --url
         """
       }
     }
   }
 
   post {
+    success {
+      echo '🎉 SUCCESS: Images pushed (A+N) and K8s deployed!'
+    }
     failure {
-      echo '❌ Pipeline failed — dumping recent events:'
+      echo '❌ FAILURE: Check console output.'
       bat 'kubectl -n %NAMESPACE% get events --sort-by=.lastTimestamp || exit 0'
-      bat 'kubectl -n %NAMESPACE% get deploy,po,svc -o wide || exit 0'
     }
     always {
-      echo '✅ Pipeline finished'
+      echo '📊 Pipeline finished.'
     }
   }
 }
