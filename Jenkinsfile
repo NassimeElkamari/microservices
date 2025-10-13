@@ -6,16 +6,10 @@ pipeline {
     K8S_DIR    = 'k8s'
     NAMESPACE  = 'microservices'
 
-    // Local images built by docker-compose
+    // Local images built by docker-compose (must match your k8s manifests)
     LOCAL_ANGULAR = 'microservices-angular-frontend:latest'
     LOCAL_NODE    = 'microservices-nodejs-task-service:latest'
     LOCAL_SPRING  = 'microservices-spring-user-service:latest'
-
-    // Docker Hub repo paths (Spring image already exists on Hub; we won't push it)
-    DOCKER_HUB_USER = 'nassimeelkamari'
-    HUB_ANGULAR = "docker.io/${DOCKER_HUB_USER}/microservices-angular-frontend:latest"
-    HUB_NODE    = "docker.io/${DOCKER_HUB_USER}/microservices-nodejs-task-service:latest"
-    HUB_SPRING  = "docker.io/${DOCKER_HUB_USER}/microservices-spring-user-service:latest"
   }
 
   options {
@@ -41,45 +35,23 @@ pipeline {
       }
     }
 
-    stage('Build Images') {
+    stage('Build Images (local)') {
       steps {
         echo '📦 Building Docker images with docker-compose...'
+        // no --no-cache, so Maven/npm layers are reused
         bat 'docker-compose -f %DOCKER_COMPOSE_FILE% build'
-        echo '🏷️ Tagging images for Docker Hub...'
-        bat """
-          docker tag %LOCAL_ANGULAR% %HUB_ANGULAR%
-          docker tag %LOCAL_NODE%    %HUB_NODE%
-          docker tag %LOCAL_SPRING%  %HUB_SPRING%
-        """
       }
     }
 
-    stage('Docker Hub Login & Push (Angular + Node only, fallback to Minikube)') {
+    stage('Load images into Minikube') {
       steps {
-        script {
-          def pushed = false
-          try {
-            withCredentials([usernamePassword(credentialsId: 'dockerHub_cred', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-              powershell '''
-                $ErrorActionPreference = "Stop"
-                docker logout | Out-Null
-                $env:DOCKER_PASS | docker login --username $env:DOCKER_USER --password-stdin
-              '''
-              retry(2) { bat "docker push %HUB_ANGULAR%" }
-              retry(2) { bat "docker push %HUB_NODE%" }
-              echo '⏭️ Skipping Spring push (using existing image on Docker Hub).'
-              pushed = true
-            }
-          } catch (e) {
-            echo "⚠️ Docker Hub push unavailable (${e}). Falling back to Minikube-loaded images for Angular & Node."
-          }
-          if (!pushed) {
-            bat """
-              minikube image load %LOCAL_ANGULAR%
-              minikube image load %LOCAL_NODE%
-            """
-          }
-        }
+        echo '🚚 Loading images into Minikube (no Docker Hub push)...'
+        bat """
+          minikube image load %LOCAL_ANGULAR%
+          minikube image load %LOCAL_NODE%
+          minikube image load %LOCAL_SPRING%
+        """
+        echo 'ℹ️ Ensure your k8s Deployments use these names and imagePullPolicy: IfNotPresent.'
       }
     }
 
@@ -90,7 +62,12 @@ pipeline {
           kubectl apply -f %K8S_DIR%/namespace.yaml
           kubectl apply -f %K8S_DIR% -n %NAMESPACE%
         """
-        echo '⏳ Waiting for rollouts (give pods time to come up)...'
+      }
+    }
+
+    stage('Wait for Rollouts') {
+      steps {
+        echo '⏳ Waiting for rollouts (give pods time to start)...'
         powershell '''
           $ErrorActionPreference = "Continue"
           try { kubectl rollout status deployment/mysql-db            -n microservices --timeout=300s } catch {}
