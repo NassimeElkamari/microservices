@@ -14,8 +14,15 @@ pipeline {
             }
         }
 
-        
 
+        stage('Cleanup Old Containers') {
+            steps {
+                echo '🧹 Cleaning up old containers and networks...'
+                bat '''
+                docker-compose -f %DOCKER_COMPOSE_FILE% down -v || exit 0
+                '''
+            }
+        }
         stage('Docker Login') {
             steps {
                 echo '🔑 Logging in to Docker Hub...'
