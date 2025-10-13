@@ -2,94 +2,123 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_HUB_USER = 'nassimeelkamari'
         DOCKER_COMPOSE_FILE = 'docker-compose.yml'
+        K8S_DIR    = 'k8s'
+        NAMESPACE  = 'microservices'
+
+        // Local image names produced by docker-compose build
+        LOCAL_ANGULAR = 'microservices-angular-frontend:latest'
+        LOCAL_NODE    = 'microservices-nodejs-task-service:latest'
+        LOCAL_SPRING  = 'microservices-spring-user-service:latest'
+
+        // Docker Hub repo (public) – adjust username if needed
+        DOCKER_HUB_USER = 'nassimeelkamari'
+        HUB_ANGULAR = "docker.io/${DOCKER_HUB_USER}/microservices-angular-frontend:latest"
+        HUB_NODE    = "docker.io/${DOCKER_HUB_USER}/microservices-nodejs-task-service:latest"
+        HUB_SPRING  = "docker.io/${DOCKER_HUB_USER}/microservices-spring-user-service:latest" // existing image on Hub
+    }
+
+    options {
+        timeout(time: 40, unit: 'MINUTES')
     }
 
     stages {
         stage('Checkout') {
             steps {
-                echo '📥 Cloning repository...'
+                echo 'Cloning repository...'
                 git branch: 'main', url: 'https://github.com/NassimeElkamari/microservices.git'
             }
         }
 
-
-        stage('Cleanup Old Containers') {
+        stage('Prepare Minikube') {
             steps {
-                echo '🧹 Cleaning up old containers and networks...'
+                echo 'Ensuring Minikube is running...'
                 bat '''
-                docker-compose -f %DOCKER_COMPOSE_FILE% down -v || exit 0
+                minikube status || minikube start --driver=docker
+                kubectl config current-context
                 '''
             }
         }
-        stage('Docker Login') {
+
+        stage('Build Images') {
             steps {
-                echo '🔑 Logging in to Docker Hub...'
-                withCredentials([usernamePassword(credentialsId: 'dockerHub_cred', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    bat """
-                    echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
-                    """
+                echo 'Building Docker images with docker-compose...'
+                bat 'docker-compose -f %DOCKER_COMPOSE_FILE% build --no-cache'
+                echo 'Tagging images for Docker Hub...'
+                bat """
+                docker tag %LOCAL_ANGULAR% %HUB_ANGULAR%
+                docker tag %LOCAL_NODE%    %HUB_NODE%
+                docker tag %LOCAL_SPRING%  %HUB_SPRING%
+                """
+            }
+        }
+
+        stage('Docker Hub Login & Push (Angular + Node only)') {
+            steps {
+                echo 'Logging in & pushing images to Docker Hub (skip Spring)...'
+                script {
+                    withDockerRegistry(credentialsId: 'dockerHub_cred', url: 'https://registry-1.docker.io/') {
+                        retry(2) {
+                            bat "docker push %HUB_ANGULAR%"
+                        }
+                        retry(2) {
+                            bat "docker push %HUB_NODE%"
+                        }
+                        echo 'Skipping Spring push: using existing image on Docker Hub.'
+                    }
                 }
             }
         }
 
-        stage('Build and Tag Images') {
+        stage('Deploy to Kubernetes') {
             steps {
-                echo '📦 Building Docker images for all microservices...'
-                bat 'docker-compose -f %DOCKER_COMPOSE_FILE% build --no-cache'
-
-                echo '🏷️ Tagging images for Docker Hub...'
+                echo 'Applying Kubernetes manifests...'
+                // Make sure your YAMLs reference HUB_* images (Docker Hub), and use imagePullPolicy: IfNotPresent (or Always)
                 bat """
-                docker tag microservices-angular-frontend:latest %DOCKER_HUB_USER%/microservices-angular-frontend:latest
-                docker tag microservices-nodejs-task-service:latest %DOCKER_HUB_USER%/microservices-nodejs-task-service:latest
-                docker tag microservices-spring-user-service:latest %DOCKER_HUB_USER%/microservices-spring-user-service:latest
+                kubectl apply -f %K8S_DIR%/namespace.yaml
+                kubectl apply -f %K8S_DIR% -n %NAMESPACE%
+                """
+                echo 'Waiting for rollouts...'
+                bat """
+                kubectl rollout status deployment/mysql-db -n %NAMESPACE% --timeout=180s || true
+                kubectl rollout status deployment/nodejs-task-service -n %NAMESPACE% --timeout=180s || true
+                kubectl rollout status deployment/spring-user-service -n %NAMESPACE% --timeout=180s || true
+                kubectl rollout status deployment/angular-frontend -n %NAMESPACE% --timeout=180s || true
                 """
             }
         }
 
-        stage('Push Images to Docker Hub') {
+        stage('Scale') {
             steps {
-                echo '☁️ Pushing images to Docker Hub...'
+                echo 'Scaling deployments...'
                 bat """
-                docker push %DOCKER_HUB_USER%/microservices-angular-frontend:latest
-                docker push %DOCKER_HUB_USER%/microservices-nodejs-task-service:latest
-                docker push %DOCKER_HUB_USER%/microservices-spring-user-service:latest
+                kubectl scale deployment nodejs-task-service   -n %NAMESPACE% --replicas=2
+                kubectl scale deployment spring-user-service   -n %NAMESPACE% --replicas=2
+                kubectl scale deployment angular-frontend      -n %NAMESPACE% --replicas=1
                 """
             }
         }
 
-        stage('Run Containers') {
+        stage('Smoke Check') {
             steps {
-                echo '🚀 Starting containers from the newly built images...'
-                bat 'docker-compose -f %DOCKER_COMPOSE_FILE% up -d --force-recreate'
-            }
-        }
-
-        stage('Test') {
-            steps {
-                echo '🧪 Running tests...'
-                // Example: bat 'npm test'
-                // Example: bat 'mvn test'
-            }
-        }
-
-        stage('Optional Cleanup') {
-            steps {
-                echo '🧹 (Optional) Stopping containers after tests...'
-                // Uncomment for production
-                // bat 'docker-compose -f %DOCKER_COMPOSE_FILE% down -v'
+                echo 'Verifying services and printing URL...'
+                bat """
+                kubectl get deploy,po,svc -n %NAMESPACE%
+                echo.
+                echo Angular service URL:
+                minikube -p minikube -n %NAMESPACE% service angular-frontend --url
+                """
             }
         }
     }
 
     post {
         always {
-            echo '✅ Pipeline finished'
-            bat 'docker logout'
+            echo 'Pipeline finished'
         }
         failure {
-            echo '❌ Pipeline failed!'
+            echo 'Pipeline failed!'
+            bat 'kubectl -n %NAMESPACE% get events --sort-by=.lastTimestamp || exit 0'
         }
     }
 }

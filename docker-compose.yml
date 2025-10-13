@@ -21,6 +21,7 @@ services:
       timeout: 5s
 
   nodejs-task-service:
+    image: microservices-nodejs-task-service:latest
     build:
       context: ./nodejs-task-service
       dockerfile: Dockerfile
@@ -33,6 +34,7 @@ services:
       - micro-net
 
   spring-user-service:
+    image: microservices-spring-user-service:latest
     build:
       context: ./userService
       dockerfile: Dockerfile
@@ -46,6 +48,7 @@ services:
       - micro-net
 
   angular-frontend:
+    image: microservices-angular-frontend:latest
     build:
       context: ./angular-frontend
       dockerfile: Dockerfile
