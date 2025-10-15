@@ -3,7 +3,7 @@ version: '3.9'
 services:
   mysql-db:
     image: mysql:8
-    container_name: mysql-db
+    container_name: mysql
     environment:
       MYSQL_ROOT_PASSWORD: 672002
       MYSQL_DATABASE: todo_db
@@ -29,7 +29,7 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - mysql-db
+      - mysql
     networks:
       - micro-net
 
@@ -42,7 +42,7 @@ services:
     ports:
       - "8081:8081"
     depends_on:
-      mysql-db:
+      mysql:
         condition: service_healthy
     networks:
       - micro-net

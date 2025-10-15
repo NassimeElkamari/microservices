@@ -8,27 +8,46 @@ spec:
   template:
     metadata: { labels: { app: spring-user-service } }
     spec:
+      initContainers:
+      - name: wait-for-mysql
+        image: mysql:8
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef: { name: mysql-secret, key: MYSQL_ROOT_PASSWORD }
+        command: ["sh","-c"]
+        args:
+          - >
+            until mysqladmin ping -hmysql -uroot -p$MYSQL_ROOT_PASSWORD --silent;
+            do echo "waiting for mysql..."; sleep 2; done
+
       containers:
       - name: spring-user-service
         image: docker.io/nassimeelkamari/microservices-spring-user-service:latest
         imagePullPolicy: IfNotPresent
         ports: [{ containerPort: 8081 }]
         env:
+        # Force the app to listen on 8081 (in case your jar defaults to 8080)
+        - name: SERVER_PORT
+          value: "8081"
+
+        # DB config (keep yours if already set)
         - name: SPRING_DATASOURCE_URL
           value: jdbc:mysql://mysql:3306/todo_db?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
         - name: SPRING_DATASOURCE_USERNAME
-          valueFrom:
-            configMapKeyRef: { name: app-config, key: DB_USER }
+          value: root
         - name: SPRING_DATASOURCE_PASSWORD
           valueFrom:
             secretKeyRef: { name: mysql-secret, key: MYSQL_ROOT_PASSWORD }
+
+        # TEMP: simple TCP probes so pod doesn't crash because of missing actuator
         readinessProbe:
-          httpGet: { path: /actuator/health, port: 8081 }
-          initialDelaySeconds: 20
+          tcpSocket: { port: 8081 }
+          initialDelaySeconds: 40
           periodSeconds: 5
         livenessProbe:
-          httpGet: { path: /actuator/health, port: 8081 }
-          initialDelaySeconds: 30
+          tcpSocket: { port: 8081 }
+          initialDelaySeconds: 60
           periodSeconds: 10
 ---
 apiVersion: v1

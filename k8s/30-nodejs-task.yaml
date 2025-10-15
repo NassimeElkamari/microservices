@@ -8,31 +8,44 @@ spec:
   template:
     metadata: { labels: { app: nodejs-task-service } }
     spec:
+      initContainers:
+      - name: wait-for-mysql
+        image: mysql:8
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef: { name: mysql-secret, key: MYSQL_ROOT_PASSWORD }
+        command: ["sh","-c"]
+        args:
+          - >
+            until mysqladmin ping -hmysql -uroot -p$MYSQL_ROOT_PASSWORD --silent;
+            do echo "waiting for mysql..."; sleep 2; done
+
       containers:
       - name: nodejs-task-service
         image: docker.io/nassimeelkamari/microservices-nodejs-task-service:latest
         imagePullPolicy: IfNotPresent
         ports: [{ containerPort: 3000 }]
         env:
+        - name: PORT               # adjust if your code uses a different env var
+          value: "3000"
         - name: DB_HOST
-          valueFrom:
-            configMapKeyRef: { name: app-config, key: DB_HOST }
+          value: "mysql"
         - name: DB_NAME
-          valueFrom:
-            configMapKeyRef: { name: app-config, key: DB_NAME }
+          value: "todo_db"
         - name: DB_USER
-          valueFrom:
-            configMapKeyRef: { name: app-config, key: DB_USER }
+          value: "root"
         - name: DB_PASS
           valueFrom:
             secretKeyRef: { name: mysql-secret, key: MYSQL_ROOT_PASSWORD }
+
         readinessProbe:
-          httpGet: { path: /health, port: 3000 }
-          initialDelaySeconds: 10
+          tcpSocket: { port: 3000 }
+          initialDelaySeconds: 25
           periodSeconds: 5
         livenessProbe:
-          httpGet: { path: /health, port: 3000 }
-          initialDelaySeconds: 20
+          tcpSocket: { port: 3000 }
+          initialDelaySeconds: 40
           periodSeconds: 10
 ---
 apiVersion: v1
