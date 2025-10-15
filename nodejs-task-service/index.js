@@ -11,7 +11,7 @@ app.use(bodyParser.json());
 
 // MySQL connection
 const db = mysql.createPool({
-  host: 'mysql-db',
+  host: 'mysql',
   user: 'root',
   password: '672002',
   database: 'todo_db',
