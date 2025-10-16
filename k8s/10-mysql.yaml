@@ -1,4 +1,26 @@
 apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-init-config
+data:
+  init.sql: |
+    CREATE TABLE IF NOT EXISTS tasks (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      title VARCHAR(255),
+      description TEXT,
+      user_id INT,
+      status VARCHAR(50)
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(255),
+      email VARCHAR(255)
+    );
+
+    INSERT INTO users (name, email) VALUES ('Alice', 'alice@example.com');
+---
+apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: mysql-pvc
@@ -32,15 +54,20 @@ spec:
         volumeMounts:
         - name: data
           mountPath: /var/lib/mysql
+        - name: mysql-init
+          mountPath: /docker-entrypoint-initdb.d
         readinessProbe:
           exec:
-            command: ["bash","-lc","mysqladmin ping -h 127.0.0.1 -uroot -p$MYSQL_ROOT_PASSWORD"]
+            command: ["sh","-c","mysqladmin ping -h 127.0.0.1 -uroot -p$MYSQL_ROOT_PASSWORD"]
           initialDelaySeconds: 10
           periodSeconds: 5
       volumes:
       - name: data
         persistentVolumeClaim:
           claimName: mysql-pvc
+      - name: mysql-init
+        configMap:
+          name: mysql-init-config
 ---
 apiVersion: v1
 kind: Service

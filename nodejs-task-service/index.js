@@ -9,14 +9,14 @@ const PORT = 3000;
 app.use(cors());
 app.use(bodyParser.json());
 
-// MySQL connection
 const db = mysql.createPool({
-  host: 'mysql',
-  user: 'root',
-  password: '672002',
-  database: 'todo_db',
+  host: process.env.DB_HOST || 'mysql',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASS || '672002',
+  database: process.env.DB_NAME || 'todo_db',
   port: 3306
 });
+
 
 // Simple test route
 app.get('/', (req, res) => {
