@@ -4,10 +4,12 @@ pipeline {
   environment {
     DOCKER_HUB_USER = 'nassimeelkamari'
     REGISTRY = "docker.io/${DOCKER_HUB_USER}"
-    // Image names
-    IMG_NODE = "${REGISTRY}/microservices-nodejs-task-service:latest"
-    IMG_WEB  = "${REGISTRY}/microservices-angular-frontend:latest"
-    IMG_SPR  = "${REGISTRY}/microservices-spring-user-service:latest" // reuse only
+
+    // Dynamic versioning
+    BUILD_TAG = "${env.BUILD_NUMBER}"
+    IMG_NODE = "${REGISTRY}/microservices-nodejs-task-service:${BUILD_TAG}"
+    IMG_WEB  = "${REGISTRY}/microservices-angular-frontend:${BUILD_TAG}"
+    IMG_SPR  = "${REGISTRY}/microservices-spring-user-service:latest"
   }
 
   stages {
@@ -29,40 +31,39 @@ pipeline {
       }
     }
 
-    stage('Build Node.js + Angular (no Spring)') {
+    stage('Build Node.js + Angular Images') {
       steps {
-        echo '📦 Building Node.js + Angular images...'
+        echo '📦 Building Node.js + Angular images (no cache)...'
         bat '''
-        docker build -t microservices-nodejs-task-service:latest -f nodejs-task-service\\Dockerfile nodejs-task-service
-        docker build -t microservices-angular-frontend:latest -f angular-frontend\\Dockerfile angular-frontend
+        docker build --no-cache -t %IMG_NODE% -f nodejs-task-service\\Dockerfile nodejs-task-service
+        docker build --no-cache -t %IMG_WEB% -f angular-frontend\\Dockerfile angular-frontend
         '''
       }
     }
 
-    stage('Tag & Push Node.js + Angular') {
+    stage('Push Images to Docker Hub') {
       steps {
-        echo '☁️ Pushing Node.js + Angular...'
+        echo '☁️ Pushing Node.js + Angular images...'
         bat '''
-        docker tag microservices-nodejs-task-service:latest %IMG_NODE%
-        docker tag microservices-angular-frontend:latest %IMG_WEB%
         docker push %IMG_NODE%
         docker push %IMG_WEB%
         '''
       }
     }
 
-    stage('Deploy to Minikube (Kubernetes)') {
+    stage('Deploy to Minikube') {
       steps {
-        echo '🚀 Applying Kubernetes manifests to Minikube...'
-        // Optional: pre-cache images into Minikube node for faster pulls
+        echo '🚀 Applying Kubernetes manifests...'
         bat '''
         minikube status || minikube start --driver=docker
+
+        REM ✅ Clear old cache to force new images
+        minikube cache delete
         minikube cache add %IMG_SPR%
         minikube cache add %IMG_NODE%
         minikube cache add %IMG_WEB%
-        '''
-        // Apply manifests
-        bat '''
+
+        REM ✅ Update YAMLs dynamically (optional if you use latest tag in YAMLs)
         kubectl apply -f k8s\\00-secrets-config.yaml
         kubectl apply -f k8s\\10-mysql.yaml
         kubectl apply -f k8s\\20-spring-user.yaml
@@ -76,22 +77,21 @@ pipeline {
       }
     }
 
-    stage('Init MySQL Tables') {
+    stage('Initialize MySQL Tables') {
       steps {
         echo '🧩 Creating tables and inserting sample data...'
         bat '''
-        kubectl exec deploy/mysql -- sh -c "mysql -uroot -p672002 -e \\"CREATE TABLE IF NOT EXISTS tasks (id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(255), description TEXT, user_id INT, status VARCHAR(50) DEFAULT 'pending'); INSERT INTO tasks (title, description, user_id, status) VALUES ('Sample Task', 'First task added automatically', 1, 'pending'); CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), email VARCHAR(255)); INSERT IGNORE INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.com');\\" todo_db"
+        kubectl exec deploy/mysql -- sh -c "mysql -uroot -p672002 -e \\"CREATE TABLE IF NOT EXISTS tasks (id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(255), description TEXT, user_id INT, status VARCHAR(50) DEFAULT 'pending'); INSERT INTO tasks (title, description, user_id, status) VALUES ('Sample Task', 'Pipeline-created task', 1, 'pending'); CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), email VARCHAR(255)); INSERT IGNORE INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.com');\\" todo_db"
         '''
       }
     }
 
-
-    stage('Smoke Test (optional)') {
+    stage('Smoke Test') {
       steps {
-        echo '🧪 Basic checks...'
+        echo '🧪 Checking deployed resources...'
         bat '''
         kubectl get pods -o wide
-        kubectl get svc angular-frontend
+        kubectl get svc
         '''
       }
     }
