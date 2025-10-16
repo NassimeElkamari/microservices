@@ -1,5 +1,5 @@
 export const environment = {
   production: false,
-  userApiBase: 'http://localhost:8081/api/users',
-  taskApiBase: 'http://localhost:3000/api/tasks'
+  apiUser: 'http://spring-user-service:8081/api/users',
+  apiTasks: 'http://nodejs-task-service:3000/api/tasks'
 };

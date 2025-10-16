@@ -76,6 +76,16 @@ pipeline {
       }
     }
 
+    stage('Init MySQL Tables') {
+      steps {
+        echo '🧩 Creating tables and inserting sample data...'
+        bat '''
+        kubectl exec deploy/mysql -- sh -c "mysql -uroot -p672002 -e \\"CREATE TABLE IF NOT EXISTS tasks (id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(255), description TEXT, user_id INT, status VARCHAR(50) DEFAULT 'pending'); INSERT INTO tasks (title, description, user_id, status) VALUES ('Sample Task', 'First task added automatically', 1, 'pending'); CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), email VARCHAR(255)); INSERT IGNORE INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.com');\\" todo_db"
+        '''
+      }
+    }
+
+
     stage('Smoke Test (optional)') {
       steps {
         echo '🧪 Basic checks...'
