@@ -1,5 +1,7 @@
 export const environment = {
   production: false,
-  userApiBase: 'http://spring-user-service:8081/api/users',
-  taskApiBase: 'http://nodejs-task-service:3000/api/tasks'
+  // Use same-origin relative paths so the browser requests go to the frontend server
+  // and Nginx can proxy them to in-cluster services.
+  userApiBase: '/api/users',
+  taskApiBase: '/api/tasks'
 };

@@ -1,12 +1,12 @@
 {
   "/api/users": {
-    "target": "http://localhost:8081",
+    "target": "http://spring-user-service:8081",
     "secure": false,
     "changeOrigin": true,
     "logLevel": "debug"
   },
   "/api/tasks": {
-    "target": "http://localhost:3000",
+    "target": "http://nodejs-task-service:3000",
     "secure": false,
     "changeOrigin": true,
     "logLevel": "debug"
