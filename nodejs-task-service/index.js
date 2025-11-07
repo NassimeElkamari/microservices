@@ -6,6 +6,21 @@ const mysql = require('mysql2');
 const app = express();
 const PORT = 3000;
 
+const client = require('prom-client');
+
+// collecte des métriques par défaut (CPU, mémoire, etc.)
+client.collectDefaultMetrics();
+
+// endpoint /metrics pour Prometheus
+app.get('/metrics', async (req, res) => {
+  try {
+    res.set('Content-Type', client.register.contentType);
+    res.end(await client.register.metrics());
+  } catch (err) {
+    res.status(500).end(err);
+  }
+});
+
 app.use(cors());
 app.use(bodyParser.json());
 
