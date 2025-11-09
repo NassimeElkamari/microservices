@@ -11,6 +11,13 @@ const client = require('prom-client');
 // collecte des métriques par défaut (CPU, mémoire, etc.)
 client.collectDefaultMetrics();
 
+// HTTP request counter
+const httpRequestsTotal = new client.Counter({
+  name: 'http_requests_total',
+  help: 'Total HTTP requests',
+  labelNames: ['method', 'route', 'status'],
+});
+
 // endpoint /metrics pour Prometheus
 app.get('/metrics', async (req, res) => {
   try {
@@ -31,6 +38,18 @@ const db = mysql.createPool({
   database: process.env.DB_NAME || 'todo_db',
   port: 3306
 });
+
+app.use((req, res, next) => {
+  res.on('finish', () => {
+    httpRequestsTotal.inc({
+      method: req.method,
+      route: req.route ? req.route.path : req.path,
+      status: res.statusCode,
+    });
+  });
+  next();
+});
+
 
 
 // Simple test route

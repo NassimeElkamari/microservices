@@ -66,4 +66,5 @@ volumes:
 
 networks:
   micro-net:
-    driver: bridge
+    external: true
+
