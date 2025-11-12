@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: monitoring
+data:
+  alerts.yml: |-
+    groups:
+      - name: availability-rules
+        rules:
+          # 🔔 Alert if Angular frontend is unreachable for more than 1 minute
+          - alert: AngularDown
+            expr: probe_success{job="blackbox-angular"} == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Angular frontend is DOWN"
+              description: "Blackbox probe failed for angular-frontend for more than 1 minute."

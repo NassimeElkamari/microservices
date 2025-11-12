@@ -49,11 +49,13 @@ pipeline {
       }
     }
 
-    stage('Deploy to Minikube') {
+    stage('Deploy App to Minikube') {
       steps {
         bat '''
+        REM Ensure Minikube is running
         minikube status || minikube start --driver=docker
 
+        REM Apply application manifests
         kubectl apply -f k8s\\00-secrets-config.yaml
         kubectl apply -f k8s\\10-mysql.yaml
         kubectl apply -f k8s\\20-spring-user.yaml
@@ -68,9 +70,34 @@ pipeline {
         kubectl patch deploy angular-frontend   -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"angular-frontend\",\"imagePullPolicy\":\"Always\"}]}}}}"
         kubectl patch deploy nodejs-task-service -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"nodejs-task-service\",\"imagePullPolicy\":\"Always\"}]}}}}"
 
+        REM Wait for app deployments to be ready
         kubectl rollout status deploy/spring-user-service
         kubectl rollout status deploy/nodejs-task-service
         kubectl rollout status deploy/angular-frontend
+        '''
+      }
+    }
+
+    stage('Deploy Monitoring Stack') {
+      steps {
+        bat '''
+        REM Ensure monitoring namespace exists
+        kubectl get ns monitoring || kubectl create namespace monitoring
+
+        REM Apply monitoring manifests (idempotent)
+        kubectl apply -n monitoring -f k8s\\monitoring\\prometheus-config.yaml
+        kubectl apply -n monitoring -f k8s\\monitoring\\prometheus-rules.yaml
+        kubectl apply -n monitoring -f k8s\\monitoring\\prometheus-deploy.yaml
+        kubectl apply -n monitoring -f k8s\\monitoring\\blackbox-exporter.yaml
+        kubectl apply -n monitoring -f k8s\\monitoring\\grafana-deploy.yaml
+        kubectl apply -n monitoring -f k8s\\monitoring\\alertmanager-config.yaml
+        kubectl apply -n monitoring -f k8s\\monitoring\\alertmanager-deploy.yaml
+
+        REM Wait for monitoring components to be ready
+        kubectl rollout status deploy/prometheus -n monitoring
+        kubectl rollout status deploy/grafana -n monitoring
+        kubectl rollout status deploy/alertmanager -n monitoring
+        kubectl rollout status deploy/blackbox-exporter -n monitoring
         '''
       }
     }
@@ -88,6 +115,7 @@ pipeline {
         bat '''
         kubectl get pods -o wide
         kubectl get svc
+        kubectl get pods -n monitoring
         '''
       }
     }

@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: monitoring
+data:
+  alertmanager.yml: |-
+    global:
+      resolve_timeout: 5m
+
+    route:
+      receiver: "slack-receiver"
+      group_by: ['alertname']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 3h
+
+    receivers:
+      - name: "slack-receiver"
+        slack_configs:
+          - send_resolved: true
+            api_url: "REDACTED"
+            channel: "#alerts"
+            title: "{{ .CommonLabels.alertname }} ({{ .CommonLabels.severity }})"
+            text: >-
+              *Summary:* {{ .CommonAnnotations.summary }}
+              *Description:* {{ .CommonAnnotations.description }}
+              *Status:* {{ .Status }}
