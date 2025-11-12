@@ -62,15 +62,9 @@ pipeline {
         kubectl apply -f k8s\\30-nodejs-task.yaml
         kubectl apply -f k8s\\40-angular-frontend.yaml
 
-        REM Update deployments to the freshly-pushed tags
-        minikube image load %IMG_NODE%
-        minikube image load %IMG_WEB%
+        REM Update deployments to the freshly-pushed tags (unique tags trigger pulls)
         kubectl set image deploy/nodejs-task-service nodejs-task-service=%IMG_NODE%
         kubectl set image deploy/angular-frontend   angular-frontend=%IMG_WEB%
-
-        REM Force pull on every rollout
-        kubectl patch deploy angular-frontend   -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"angular-frontend\",\"imagePullPolicy\":\"Always\"}]}}}}"
-        kubectl patch deploy nodejs-task-service -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"nodejs-task-service\",\"imagePullPolicy\":\"Always\"}]}}}}"
 
         REM Wait for app deployments to be ready
         kubectl rollout status deploy/spring-user-service
@@ -79,6 +73,7 @@ pipeline {
         '''
       }
     }
+
 
     stage('Deploy Monitoring Stack') {
       steps {
