@@ -63,6 +63,8 @@ pipeline {
         kubectl apply -f k8s\\40-angular-frontend.yaml
 
         REM Update deployments to the freshly-pushed tags
+        minikube image load %IMG_NODE%
+        minikube image load %IMG_WEB%
         kubectl set image deploy/nodejs-task-service nodejs-task-service=%IMG_NODE%
         kubectl set image deploy/angular-frontend   angular-frontend=%IMG_WEB%
 
