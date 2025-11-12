@@ -96,9 +96,9 @@ pipeline {
         kubectl set image deploy/nodejs-task-service nodejs-task-service=%IMG_NODE% --record
         kubectl set image deploy/angular-frontend   angular-frontend=%IMG_WEB% --record
 
-        kubectl rollout status deploy/spring-user-service     --timeout=180s
-        kubectl rollout status deploy/nodejs-task-service     --timeout=180s
-        kubectl rollout status deploy/angular-frontend        --timeout=180s
+        kubectl rollout status deploy/spring-user-service     
+        kubectl rollout status deploy/nodejs-task-service    
+        kubectl rollout status deploy/angular-frontend        
         '''
       }
     }
@@ -119,10 +119,10 @@ pipeline {
         kubectl apply -n monitoring -f k8s\\monitoring\\alertmanager-config.yaml
         kubectl apply -n monitoring -f k8s\\monitoring\\alertmanager-deploy.yaml
 
-        kubectl rollout status deploy/prometheus         -n monitoring --timeout=180s
-        kubectl rollout status deploy/grafana            -n monitoring --timeout=180s
-        kubectl rollout status deploy/alertmanager       -n monitoring --timeout=180s
-        kubectl rollout status deploy/blackbox-exporter  -n monitoring --timeout=180s
+        kubectl rollout status deploy/prometheus         -n monitoring 
+        kubectl rollout status deploy/grafana            -n monitoring
+        kubectl rollout status deploy/alertmanager       -n monitoring
+        kubectl rollout status deploy/blackbox-exporter  -n monitoring
         '''
       }
     }
@@ -131,14 +131,11 @@ pipeline {
       steps {
         bat '''
         kubectl wait --for=condition=available deploy/mysql --timeout=120s
-        kubectl exec deploy/mysql -- sh -c "mysql -uroot -p672002 todo_db -e \\
-          \\"CREATE TABLE IF NOT EXISTS tasks (id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(255), description TEXT, user_id INT, status VARCHAR(50) DEFAULT 'pending'); \\\\
-             INSERT INTO tasks (title, description, user_id, status) VALUES ('Sample Task', 'Pipeline-created task', 1, 'pending'); \\\\
-             CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), email VARCHAR(255)); \\\\
-             INSERT IGNORE INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.com');\\""
+        kubectl exec deploy/mysql -- sh -c "mysql -uroot -p672002 -e \\"CREATE DATABASE IF NOT EXISTS todo_db; USE todo_db; CREATE TABLE IF NOT EXISTS tasks (id INT AUTO_INCREMENT PRIMARY KEY, title VARCHAR(255), description TEXT, user_id INT, status VARCHAR(50) DEFAULT 'pending'); INSERT INTO tasks (title, description, user_id, status) VALUES ('Sample Task', 'Pipeline-created task', 1, 'pending'); CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255), email VARCHAR(255)); INSERT IGNORE INTO users (id, name, email) VALUES (1, 'Alice', 'alice@example.com');\\""
         '''
       }
     }
+
 
     stage('Smoke Test') {
       steps {
